@@ -1,0 +1,439 @@
+import React, { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { api } from '../../api/client'
+import {
+  Ruler,
+  Plus,
+  Search,
+  Edit,
+  Trash2,
+  ChevronLeft,
+  ChevronRight,
+  Loader2,
+  CheckCircle,
+  XCircle,
+  Scale,
+  X,  // Add this import
+} from 'lucide-react'
+import toast from 'react-hot-toast'
+
+const Units = () => {
+  const navigate = useNavigate()
+  const [units, setUnits] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [search, setSearch] = useState('')
+  const [currentPage, setCurrentPage] = useState(1)
+  const [totalPages, setTotalPages] = useState(1)
+  const [showModal, setShowModal] = useState(false)
+  const [editingUnit, setEditingUnit] = useState(null)
+  const [formData, setFormData] = useState({
+    name: '',
+    name_en: '',
+    name_fr: '',
+    abbreviation: '',
+    is_active: true,
+  })
+  const [errors, setErrors] = useState({})
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    fetchUnits()
+  }, [currentPage, search])
+
+  const fetchUnits = async () => {
+    setLoading(true)
+    try {
+      const params = {
+        page: currentPage,
+        search: search || undefined,
+      }
+      const response = await api.get('/units/', { params })
+      setUnits(response.data.results || response.data || [])
+      if (response.data.count) {
+        setTotalPages(Math.ceil(response.data.count / 50))
+      }
+    } catch (error) {
+      toast.error('Erreur lors du chargement des unités')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleDelete = async (id) => {
+    if (!confirm('Êtes-vous sûr de vouloir supprimer cette unité ?')) return
+    try {
+      await api.delete(`/units/${id}/`)
+      toast.success('Unité supprimée')
+      fetchUnits()
+    } catch (error) {
+      toast.error('Erreur lors de la suppression')
+    }
+  }
+
+  const openModal = (unit = null) => {
+    if (unit) {
+      setEditingUnit(unit)
+      setFormData({
+        name: unit.name || '',
+        name_en: unit.name_en || '',
+        name_fr: unit.name_fr || '',
+        abbreviation: unit.abbreviation || '',
+        is_active: unit.is_active !== undefined ? unit.is_active : true,
+      })
+    } else {
+      setEditingUnit(null)
+      setFormData({
+        name: '',
+        name_en: '',
+        name_fr: '',
+        abbreviation: '',
+        is_active: true,
+      })
+    }
+    setErrors({})
+    setShowModal(true)
+  }
+
+  const handleChange = (e) => {
+    const { name, value, type, checked } = e.target
+    setFormData({
+      ...formData,
+      [name]: type === 'checkbox' ? checked : value,
+    })
+    if (errors[name]) {
+      setErrors({ ...errors, [name]: '' })
+    }
+  }
+
+  const validate = () => {
+    const newErrors = {}
+    if (!formData.name.trim()) newErrors.name = 'Le nom est requis'
+    if (!formData.abbreviation.trim()) newErrors.abbreviation = 'L\'abréviation est requise'
+    setErrors(newErrors)
+    return Object.keys(newErrors).length === 0
+  }
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    if (!validate()) return
+
+    setSaving(true)
+    try {
+      if (editingUnit) {
+        await api.put(`/units/${editingUnit.id}/`, formData)
+        toast.success('Unité mise à jour')
+      } else {
+        await api.post('/units/', formData)
+        toast.success('Unité créée')
+      }
+      setShowModal(false)
+      fetchUnits()
+    } catch (error) {
+      if (error.response?.data) {
+        setErrors(error.response.data)
+        toast.error('Erreur lors de l\'enregistrement')
+      } else {
+        toast.error('Erreur de connexion')
+      }
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="text-center">
+          <Loader2 className="w-12 h-12 text-primary-600 animate-spin mx-auto mb-4" />
+          <p className="text-gray-500">Chargement des unités...</p>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Page Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h2 className="text-2xl font-bold text-gray-900">Unités</h2>
+          <p className="text-gray-500">Gestion des unités de mesure</p>
+        </div>
+        <button
+          onClick={() => openModal()}
+          className="btn-primary flex items-center space-x-2"
+        >
+          <Plus className="w-4 h-4" />
+          <span>Nouvelle Unité</span>
+        </button>
+      </div>
+
+      {/* Search */}
+      <div className="bg-white rounded-xl shadow-card border border-gray-100 p-4">
+        <div className="flex flex-col sm:flex-row gap-3">
+          <div className="flex-1 relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Rechercher une unité..."
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value)
+                setCurrentPage(1)
+              }}
+              className="w-full pl-9 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Units Table */}
+      <div className="bg-white rounded-xl shadow-card border border-gray-100 overflow-hidden">
+        {units.length === 0 ? (
+          <div className="text-center py-12">
+            <Ruler className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+            <h3 className="text-xl font-semibold text-gray-900 mb-2">Aucune unité</h3>
+            <p className="text-gray-500">Commencez par créer votre première unité de mesure.</p>
+            <button
+              onClick={() => openModal()}
+              className="mt-4 btn-primary inline-flex items-center space-x-2"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Nouvelle Unité</span>
+            </button>
+          </div>
+        ) : (
+          <>
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="bg-gray-50 border-b border-gray-200">
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Unité
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Abréviation
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Nom en Anglais
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Nom en Français
+                    </th>
+                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Statut
+                    </th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Actions
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200">
+                  {units.map((unit) => (
+                    <tr key={unit.id} className="hover:bg-gray-50 transition-colors">
+                      <td className="px-4 py-3">
+                        <div className="flex items-center space-x-3">
+                          <div className="w-8 h-8 bg-primary-100 rounded-lg flex items-center justify-center">
+                            <Scale className="w-4 h-4 text-primary-600" />
+                          </div>
+                          <p className="font-medium text-gray-900">{unit.name}</p>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <code className="text-xs font-mono bg-gray-100 px-2 py-1 rounded">
+                          {unit.abbreviation}
+                        </code>
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-500">
+                        {unit.name_en || '—'}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-500">
+                        {unit.name_fr || '—'}
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        {unit.is_active ? (
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                            <CheckCircle className="w-3 h-3 mr-1" />
+                            Actif
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                            <XCircle className="w-3 h-3 mr-1" />
+                            Inactif
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <div className="flex items-center justify-end space-x-2">
+                          <button
+                            onClick={() => openModal(unit)}
+                            className="p-1 text-gray-400 hover:text-blue-600 transition-colors"
+                            title="Modifier"
+                          >
+                            <Edit className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => handleDelete(unit.id)}
+                            className="p-1 text-gray-400 hover:text-red-600 transition-colors"
+                            title="Supprimer"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <div className="px-4 py-3 border-t border-gray-200 flex items-center justify-between">
+                <p className="text-sm text-gray-500">
+                  Page {currentPage} sur {totalPages}
+                </p>
+                <div className="flex items-center space-x-2">
+                  <button
+                    onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+                    disabled={currentPage === 1}
+                    className="p-2 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
+                    disabled={currentPage === totalPages}
+                    className="p-2 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+
+      {/* Modal */}
+      {showModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full mx-4 p-6 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900 flex items-center space-x-2">
+                <Scale className="w-5 h-5 text-primary-600" />
+                <span>{editingUnit ? 'Modifier l\'Unité' : 'Nouvelle Unité'}</span>
+              </h3>
+              <button
+                onClick={() => setShowModal(false)}
+                className="p-1 hover:bg-gray-100 rounded-lg text-gray-500"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Nom <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  name="name"
+                  value={formData.name}
+                  onChange={handleChange}
+                  className={`input-field ${errors.name ? 'border-red-500' : ''}`}
+                  placeholder="Ex: Pièce"
+                />
+                {errors.name && (
+                  <p className="mt-1 text-sm text-red-600">{errors.name}</p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Abréviation <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  name="abbreviation"
+                  value={formData.abbreviation}
+                  onChange={handleChange}
+                  className={`input-field ${errors.abbreviation ? 'border-red-500' : ''}`}
+                  placeholder="Ex: pce"
+                />
+                {errors.abbreviation && (
+                  <p className="mt-1 text-sm text-red-600">{errors.abbreviation}</p>
+                )}
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Nom en Anglais
+                  </label>
+                  <input
+                    type="text"
+                    name="name_en"
+                    value={formData.name_en}
+                    onChange={handleChange}
+                    className="input-field"
+                    placeholder="Ex: Piece"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Nom en Français
+                  </label>
+                  <input
+                    type="text"
+                    name="name_fr"
+                    value={formData.name_fr}
+                    onChange={handleChange}
+                    className="input-field"
+                    placeholder="Ex: Pièce"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  name="is_active"
+                  checked={formData.is_active}
+                  onChange={handleChange}
+                  className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                />
+                <label className="text-sm text-gray-700">Unité active</label>
+              </div>
+
+              <div className="flex items-center space-x-3 pt-4">
+                <button
+                  type="submit"
+                  disabled={saving}
+                  className="flex-1 btn-primary flex items-center justify-center space-x-2 py-2.5"
+                >
+                  {saving ? (
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                  ) : (
+                    <CheckCircle className="w-5 h-5" />
+                  )}
+                  <span>{saving ? 'Enregistrement...' : editingUnit ? 'Mettre à jour' : 'Créer'}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowModal(false)}
+                  className="flex-1 btn-secondary py-2.5"
+                >
+                  Annuler
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+export default Units

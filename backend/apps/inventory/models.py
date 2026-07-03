@@ -13,7 +13,7 @@ class Stock(BaseModel):
     """
     tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE, related_name='stock')
     branch = models.ForeignKey(Branch, on_delete=models.CASCADE, related_name='stock')
-    product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name='stock')
+    product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name='stock')  # This is the key
     
     quantity = models.IntegerField(default=0, validators=[MinValueValidator(0)])
     reserved_quantity = models.IntegerField(default=0, validators=[MinValueValidator(0)])

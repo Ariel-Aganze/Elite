@@ -1,0 +1,441 @@
+import React, { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { api } from '../../api/client'
+import {
+  Warehouse,
+  Plus,
+  Search,
+  Eye,
+  ChevronLeft,
+  ChevronRight,
+  Filter,
+  X,
+  Loader2,
+  Truck,
+  CheckCircle,
+  Clock,
+  AlertCircle,
+  ArrowRight,
+  Building2,
+  Package,
+  Calendar,
+  User,
+  Check,
+  XCircle,
+} from 'lucide-react'
+import toast from 'react-hot-toast'
+
+const Transfers = () => {
+  const navigate = useNavigate()
+  const [transfers, setTransfers] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [search, setSearch] = useState('')
+  const [currentPage, setCurrentPage] = useState(1)
+  const [totalPages, setTotalPages] = useState(1)
+  const [statusFilter, setStatusFilter] = useState('')
+  const [fromBranchFilter, setFromBranchFilter] = useState('')
+  const [toBranchFilter, setToBranchFilter] = useState('')
+  const [branches, setBranches] = useState([])
+  const [showFilters, setShowFilters] = useState(false)
+
+  useEffect(() => {
+    fetchBranches()
+    fetchTransfers()
+  }, [currentPage, search, statusFilter, fromBranchFilter, toBranchFilter])
+
+  const fetchBranches = async () => {
+    try {
+      const response = await api.get('/branches/?is_active=true')
+      setBranches(response.data.results || response.data || [])
+    } catch (error) {
+      console.error('Error fetching branches:', error)
+    }
+  }
+
+  const fetchTransfers = async () => {
+    setLoading(true)
+    try {
+      const params = {
+        page: currentPage,
+        search: search || undefined,
+        status: statusFilter || undefined,
+        from_branch: fromBranchFilter || undefined,
+        to_branch: toBranchFilter || undefined,
+      }
+      const response = await api.get('/transfers/', { params })
+      setTransfers(response.data.results || response.data || [])
+      if (response.data.count) {
+        setTotalPages(Math.ceil(response.data.count / 50))
+      }
+    } catch (error) {
+      toast.error('Erreur lors du chargement des transferts')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const formatDate = (date) => {
+    if (!date) return '—'
+    return new Date(date).toLocaleDateString('fr-FR', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    })
+  }
+
+  const getStatusBadge = (status) => {
+    const badges = {
+      requested: { label: 'Demandé', className: 'badge-warning' },
+      approved: { label: 'Approuvé', className: 'badge-info' },
+      dispatched: { label: 'Expédié', className: 'badge-primary' },
+      received: { label: 'Réceptionné', className: 'badge-success' },
+      cancelled: { label: 'Annulé', className: 'badge-danger' },
+    }
+    const badge = badges[status] || badges.requested
+    return (
+      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${badge.className}`}>
+        {badge.label}
+      </span>
+    )
+  }
+
+  const getStatusIcon = (status) => {
+    switch (status) {
+      case 'requested':
+        return <Clock className="w-4 h-4 text-amber-500" />
+      case 'approved':
+        return <Check className="w-4 h-4 text-blue-500" />
+      case 'dispatched':
+        return <Truck className="w-4 h-4 text-primary-500" />
+      case 'received':
+        return <CheckCircle className="w-4 h-4 text-green-500" />
+      case 'cancelled':
+        return <XCircle className="w-4 h-4 text-red-500" />
+      default:
+        return <Clock className="w-4 h-4 text-gray-400" />
+    }
+  }
+
+  const handleApprove = async (id) => {
+    if (!confirm('Approuver ce transfert ?')) return
+    try {
+      await api.post(`/transfers/${id}/approve/`, { approved: true })
+      toast.success('Transfert approuvé')
+      fetchTransfers()
+    } catch (error) {
+      toast.error('Erreur lors de l\'approbation')
+    }
+  }
+
+  const handleDispatch = async (id) => {
+    if (!confirm('Expédier ce transfert ? Cela réduira le stock de la source.')) return
+    try {
+      await api.post(`/transfers/${id}/dispatch/`)
+      toast.success('Transfert expédié')
+      fetchTransfers()
+    } catch (error) {
+      toast.error(error.response?.data?.error || 'Erreur lors de l\'expédition')
+    }
+  }
+
+  const handleReceive = async (id) => {
+    if (!confirm('Réceptionner ce transfert ? Cela augmentera le stock de la destination.')) return
+    try {
+      await api.post(`/transfers/${id}/receive/`)
+      toast.success('Transfert réceptionné')
+      fetchTransfers()
+    } catch (error) {
+      toast.error('Erreur lors de la réception')
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="text-center">
+          <Loader2 className="w-12 h-12 text-primary-600 animate-spin mx-auto mb-4" />
+          <p className="text-gray-500">Chargement des transferts...</p>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Page Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h2 className="text-2xl font-bold text-gray-900">Transferts</h2>
+          <p className="text-gray-500">Gestion des transferts de stock entre succursales</p>
+        </div>
+        <button
+          onClick={() => navigate('/app/transfers/new')}
+          className="btn-primary flex items-center space-x-2"
+        >
+          <Plus className="w-4 h-4" />
+          <span>Nouveau Transfert</span>
+        </button>
+      </div>
+
+      {/* Search and Filters */}
+      <div className="bg-white rounded-xl shadow-card border border-gray-100 p-4">
+        <div className="flex flex-col sm:flex-row gap-3">
+          <div className="flex-1 relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Rechercher un transfert..."
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value)
+                setCurrentPage(1)
+              }}
+              className="w-full pl-9 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+            />
+          </div>
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={() => setShowFilters(!showFilters)}
+              className="px-3 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors flex items-center space-x-2"
+            >
+              <Filter className="w-4 h-4 text-gray-500" />
+              <span className="text-sm text-gray-600">Filtres</span>
+            </button>
+            {(statusFilter || fromBranchFilter || toBranchFilter) && (
+              <button
+                onClick={() => {
+                  setStatusFilter('')
+                  setFromBranchFilter('')
+                  setToBranchFilter('')
+                  setCurrentPage(1)
+                }}
+                className="px-2 py-1 text-sm text-gray-500 hover:text-gray-700 flex items-center space-x-1"
+              >
+                <X className="w-3 h-3" />
+                <span>Effacer</span>
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Filter Dropdown */}
+        {showFilters && (
+          <div className="mt-3 pt-3 border-t border-gray-200 flex flex-wrap gap-3">
+            <div className="flex items-center space-x-2">
+              <label className="text-sm font-medium text-gray-700">Statut:</label>
+              <select
+                value={statusFilter}
+                onChange={(e) => {
+                  setStatusFilter(e.target.value)
+                  setCurrentPage(1)
+                }}
+                className="px-3 py-1.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
+              >
+                <option value="">Tous</option>
+                <option value="requested">Demandé</option>
+                <option value="approved">Approuvé</option>
+                <option value="dispatched">Expédié</option>
+                <option value="received">Réceptionné</option>
+                <option value="cancelled">Annulé</option>
+              </select>
+            </div>
+            <div className="flex items-center space-x-2">
+              <label className="text-sm font-medium text-gray-700">Source:</label>
+              <select
+                value={fromBranchFilter}
+                onChange={(e) => {
+                  setFromBranchFilter(e.target.value)
+                  setCurrentPage(1)
+                }}
+                className="px-3 py-1.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
+              >
+                <option value="">Toutes</option>
+                {branches.map((branch) => (
+                  <option key={branch.id} value={branch.id}>
+                    {branch.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="flex items-center space-x-2">
+              <label className="text-sm font-medium text-gray-700">Destination:</label>
+              <select
+                value={toBranchFilter}
+                onChange={(e) => {
+                  setToBranchFilter(e.target.value)
+                  setCurrentPage(1)
+                }}
+                className="px-3 py-1.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
+              >
+                <option value="">Toutes</option>
+                {branches.map((branch) => (
+                  <option key={branch.id} value={branch.id}>
+                    {branch.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Transfers Table */}
+      <div className="bg-white rounded-xl shadow-card border border-gray-100 overflow-hidden">
+        {transfers.length === 0 ? (
+          <div className="text-center py-12">
+            <Warehouse className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+            <h3 className="text-xl font-semibold text-gray-900 mb-2">Aucun transfert</h3>
+            <p className="text-gray-500">Commencez par créer votre premier transfert de stock.</p>
+            <button
+              onClick={() => navigate('/app/transfers/new')}
+              className="mt-4 btn-primary inline-flex items-center space-x-2"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Nouveau Transfert</span>
+            </button>
+          </div>
+        ) : (
+          <>
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="bg-gray-50 border-b border-gray-200">
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      N° Transfert
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Source
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Destination
+                    </th>
+                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Produits
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Date
+                    </th>
+                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Statut
+                    </th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Actions
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200">
+                  {transfers.map((transfer) => (
+                    <tr key={transfer.id} className="hover:bg-gray-50 transition-colors">
+                      <td className="px-4 py-3">
+                        <span className="font-mono text-sm font-medium text-gray-900">
+                          {transfer.transfer_number}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center space-x-2">
+                          <Building2 className="w-4 h-4 text-gray-400" />
+                          <span className="font-medium text-gray-900">{transfer.from_branch_name}</span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center space-x-2">
+                          <Building2 className="w-4 h-4 text-gray-400" />
+                          <span className="font-medium text-gray-900">{transfer.to_branch_name}</span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-center text-sm text-gray-500">
+                        {transfer.total_quantity || 0}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-600">
+                        {formatDate(transfer.created_at)}
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <div className="flex items-center justify-center space-x-2">
+                          {getStatusIcon(transfer.status)}
+                          {getStatusBadge(transfer.status)}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <div className="flex items-center justify-end space-x-2">
+                          <button
+                            onClick={() => navigate(`/app/transfers/${transfer.id}`)}
+                            className="p-1 text-gray-400 hover:text-primary-600 transition-colors"
+                            title="Voir"
+                          >
+                            <Eye className="w-4 h-4" />
+                          </button>
+                          
+                          {/* Action buttons based on status */}
+                          {transfer.status === 'requested' && (
+                            <>
+                              <button
+                                onClick={() => handleApprove(transfer.id)}
+                                className="p-1 text-gray-400 hover:text-green-600 transition-colors"
+                                title="Approuver"
+                              >
+                                <Check className="w-4 h-4" />
+                              </button>
+                            </>
+                          )}
+                          
+                          {transfer.status === 'approved' && (
+                            <button
+                              onClick={() => handleDispatch(transfer.id)}
+                              className="p-1 text-gray-400 hover:text-blue-600 transition-colors"
+                              title="Expédier"
+                            >
+                              <Truck className="w-4 h-4" />
+                            </button>
+                          )}
+                          
+                          {transfer.status === 'dispatched' && (
+                            <button
+                              onClick={() => handleReceive(transfer.id)}
+                              className="p-1 text-gray-400 hover:text-green-600 transition-colors"
+                              title="Réceptionner"
+                            >
+                              <CheckCircle className="w-4 h-4" />
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <div className="px-4 py-3 border-t border-gray-200 flex items-center justify-between">
+                <p className="text-sm text-gray-500">
+                  Page {currentPage} sur {totalPages}
+                </p>
+                <div className="flex items-center space-x-2">
+                  <button
+                    onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+                    disabled={currentPage === 1}
+                    className="p-2 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
+                    disabled={currentPage === totalPages}
+                    className="p-2 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
+export default Transfers

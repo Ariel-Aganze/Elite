@@ -5,6 +5,7 @@ from apps.core.models import BaseModel
 from apps.tenants.models import Tenant
 from apps.branches.models import Branch
 
+
 class Category(BaseModel):
     """
     Product category with hierarchical structure (parent-child).
@@ -123,12 +124,15 @@ class Product(BaseModel):
 
     def get_current_stock(self):
         """Get current stock quantity for this product across all branches"""
-        return self.stock_set.aggregate(total=models.Sum('quantity'))['total'] or 0
+        # Use the related_name 'stock' from the Stock model
+        from apps.inventory.models import Stock
+        return Stock.objects.filter(product=self).aggregate(total=models.Sum('quantity'))['total'] or 0
     
     def get_branch_stock(self, branch):
         """Get stock quantity for a specific branch"""
+        from apps.inventory.models import Stock
         try:
-            stock = self.stock_set.get(branch=branch)
+            stock = Stock.objects.get(product=self, branch=branch)
             return stock.quantity
-        except:
+        except Stock.DoesNotExist:
             return 0

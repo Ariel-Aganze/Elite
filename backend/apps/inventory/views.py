@@ -1,3 +1,4 @@
+from apps.inventory import serializers
 from rest_framework import generics, filters, permissions, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -401,6 +402,14 @@ class InventoryAdjustmentListCreateView(generics.ListCreateAPIView):
             old_quantity = stock.quantity
         except Stock.DoesNotExist:
             old_quantity = 0
+            # Create stock record if it doesn't exist
+            stock = Stock.objects.create(
+                tenant=user.tenant,
+                branch=serializer.validated_data['branch'],
+                product=serializer.validated_data['product'],
+                quantity=0,
+                average_cost=0
+            )
         
         # Calculate new quantity
         if serializer.validated_data['adjustment_type'] == 'increase':
@@ -410,15 +419,32 @@ class InventoryAdjustmentListCreateView(generics.ListCreateAPIView):
             if new_quantity < 0:
                 raise serializers.ValidationError("Resulting quantity cannot be negative.")
         
-        # Save adjustment
-        serializer.save(
+        # Save adjustment with auto-approval
+        adjustment = serializer.save(
             tenant=user.tenant,
             old_quantity=old_quantity,
             new_quantity=new_quantity,
             created_by=user,
-            is_approved=False
+            is_approved=True,  # Auto-approve
+            approved_by=user,
+            approved_at=timezone.now()
         )
-
+        
+        # Update stock immediately since auto-approved
+        stock.quantity = new_quantity
+        stock.save()
+        
+        # Create stock movement
+        StockMovement.objects.create(
+            tenant=user.tenant,
+            branch=serializer.validated_data['branch'],
+            product=serializer.validated_data['product'],
+            quantity=serializer.validated_data['quantity'],
+            movement_type='adjustment',
+            reference=f"ADJ-{adjustment.id}",
+            notes=f"Inventory adjustment: {adjustment.reason}",
+            created_by=user
+        )
 
 class InventoryAdjustmentDetailView(generics.RetrieveUpdateDestroyAPIView):
     """

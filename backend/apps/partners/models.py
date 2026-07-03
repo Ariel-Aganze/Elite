@@ -1,7 +1,10 @@
 import uuid
 from django.db import models
+from django.db.models import Sum
+from decimal import Decimal
 from apps.core.models import BaseModel
 from apps.tenants.models import Tenant
+
 
 class Supplier(BaseModel):
     """
@@ -31,9 +34,20 @@ class Supplier(BaseModel):
 
     def get_outstanding_balance(self):
         """Get total amount owed to this supplier"""
-        return self.purchases.aggregate(
-            total=models.Sum('total_amount') - models.Sum('paid_amount')
-        )['total'] or 0
+        from apps.purchases.models import PurchaseOrder
+        total_purchases = PurchaseOrder.objects.filter(
+            supplier=self,
+            status='received',
+            is_deleted=False
+        ).aggregate(total=Sum('total_amount'))['total'] or Decimal('0')
+        
+        total_paid = PurchaseOrder.objects.filter(
+            supplier=self,
+            status='received',
+            is_deleted=False
+        ).aggregate(total=Sum('paid_amount'))['total'] or Decimal('0')
+        
+        return total_purchases - total_paid
 
 
 class Customer(BaseModel):
@@ -69,6 +83,27 @@ class Customer(BaseModel):
 
     def get_outstanding_balance(self):
         """Get total amount owed by this customer"""
-        return self.sales.aggregate(
-            total=models.Sum('total_amount') - models.Sum('paid_amount')
-        )['total'] or 0
+        from apps.sales.models import Sale, Payment
+        
+        total_sales = Sale.objects.filter(
+            customer=self,
+            status='completed',
+            is_deleted=False
+        ).aggregate(total=Sum('total_amount'))['total'] or Decimal('0')
+        
+        total_paid = Payment.objects.filter(
+            customer=self,
+            is_deleted=False
+        ).aggregate(total=Sum('amount'))['total'] or Decimal('0')
+        
+        return total_sales - total_paid
+    
+    def get_total_sales(self):
+        """Get total sales amount for this customer"""
+        from apps.sales.models import Sale
+        
+        return Sale.objects.filter(
+            customer=self,
+            status='completed',
+            is_deleted=False
+        ).aggregate(total=Sum('total_amount'))['total'] or Decimal('0')

@@ -9,14 +9,16 @@ from .models import Stock, StockMovement, Transfer, TransferItem, InventoryAdjus
 class StockSerializer(serializers.ModelSerializer):
     product_name = serializers.CharField(source='product.name', read_only=True)
     product_sku = serializers.CharField(source='product.sku', read_only=True)
+    product_id = serializers.CharField(source='product.id', read_only=True)
+    product_min_stock = serializers.IntegerField(source='product.min_stock', read_only=True, default=0)
     available_quantity = serializers.SerializerMethodField()
     total_value = serializers.SerializerMethodField()
     
     class Meta:
         model = Stock
         fields = [
-            'id', 'branch', 'product', 'product_name', 'product_sku',
-            'quantity', 'reserved_quantity', 'available_quantity',
+            'id', 'branch', 'product', 'product_id', 'product_name', 'product_sku',
+            'product_min_stock', 'quantity', 'reserved_quantity', 'available_quantity',
             'average_cost', 'total_value', 'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'created_at', 'updated_at', 'sync_version']

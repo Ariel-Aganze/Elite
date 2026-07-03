@@ -1,14 +1,15 @@
 from rest_framework import generics, status, permissions
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from django.db.models import Count, Q, Sum
+from django.db.models import Count, Q
 from django.utils import timezone
 from datetime import timedelta
 from apps.core.permissions import IsPlatformAdmin
 from apps.users.models import User
 from apps.branches.models import Branch
 from .models import Tenant
-from .serializers import TenantSerializer, TenantActivationSerializer, TenantDashboardSerializer
+from .serializers import TenantSerializer, TenantActivationSerializer
+
 
 class TenantListView(generics.ListAPIView):
     """
@@ -39,6 +40,7 @@ class TenantListView(generics.ListAPIView):
         
         return queryset.order_by('-created_at')
 
+
 class TenantDetailView(generics.RetrieveUpdateAPIView):
     """
     Retrieve or update a specific tenant (Platform Admin only).
@@ -46,6 +48,53 @@ class TenantDetailView(generics.RetrieveUpdateAPIView):
     queryset = Tenant.objects.all()
     serializer_class = TenantSerializer
     permission_classes = [permissions.IsAuthenticated, IsPlatformAdmin]
+
+
+class CurrentTenantView(APIView):
+    """
+    Get the current user's tenant information.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        user = request.user
+        
+        # Platform admins don't have a tenant
+        if user.is_platform_admin:
+            return Response({
+                'error': 'Platform admin does not have a tenant'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        tenant = user.tenant
+        if not tenant:
+            return Response({
+                'error': 'No tenant associated with user'
+            }, status=status.HTTP_404_NOT_FOUND)
+        
+        serializer = TenantSerializer(tenant)
+        return Response(serializer.data)
+    
+    def put(self, request):
+        """Update the current user's tenant"""
+        user = request.user
+        
+        if user.is_platform_admin:
+            return Response({
+                'error': 'Platform admin does not have a tenant'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        tenant = user.tenant
+        if not tenant:
+            return Response({
+                'error': 'No tenant associated with user'
+            }, status=status.HTTP_404_NOT_FOUND)
+        
+        serializer = TenantSerializer(tenant, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        
+        return Response(serializer.data)
+
 
 class TenantActivationView(APIView):
     """
@@ -77,6 +126,7 @@ class TenantActivationView(APIView):
             'message': f'Tenant {tenant.name} has been {"activated" if tenant.is_active else "deactivated"}.',
             'tenant': TenantSerializer(tenant).data
         })
+
 
 class TenantDashboardView(APIView):
     """
@@ -118,6 +168,7 @@ class TenantDashboardView(APIView):
             'total_branches': total_branches,
             'recent_signups': recent_signups,
         })
+
 
 class TenantExtendSubscriptionView(APIView):
     """

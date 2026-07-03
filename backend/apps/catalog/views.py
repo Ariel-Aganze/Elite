@@ -9,6 +9,7 @@ from .serializers import (
     CategorySerializer, BrandSerializer, UnitSerializer,
     ProductListSerializer, ProductDetailSerializer, ProductCreateUpdateSerializer
 )
+from apps.catalog import serializers
 
 # ============ Category Views ============
 class CategoryListCreateView(generics.ListCreateAPIView):

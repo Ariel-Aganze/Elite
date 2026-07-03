@@ -131,6 +131,7 @@ class SaleCreateSerializer(serializers.ModelSerializer):
         
         # Generate sale number
         from datetime import datetime
+        import random
         timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
         random_num = random.randint(1000, 9999)
         sale_number = f"SA-{timestamp}-{random_num}"
@@ -138,8 +139,6 @@ class SaleCreateSerializer(serializers.ModelSerializer):
         # Calculate totals
         subtotal = Decimal('0')
         total_cost = Decimal('0')
-        total_tax = Decimal('0')
-        total_discount = Decimal('0')
         
         processed_items = []
         
@@ -148,15 +147,17 @@ class SaleCreateSerializer(serializers.ModelSerializer):
             quantity = item_data['quantity']
             unit_price = item_data['unit_price']
             
-            # Get product cost (from stock average cost)
+            # Get product cost from stock average cost
             try:
                 stock = Stock.objects.get(
                     tenant=user.tenant,
                     branch=validated_data['branch'],
                     product=product
                 )
-                unit_cost = stock.average_cost
+                # Use average cost from stock, or fallback to purchase price
+                unit_cost = stock.average_cost or product.purchase_price
             except Stock.DoesNotExist:
+                # If no stock record, use purchase price as cost
                 unit_cost = product.purchase_price
             
             item_total = quantity * unit_price
@@ -172,19 +173,16 @@ class SaleCreateSerializer(serializers.ModelSerializer):
                 'total_price': item_total,
                 'unit_cost': unit_cost,
                 'total_cost': item_cost,
-                'discount_amount': 0
             })
         
         # Calculate final total
-        total_amount = subtotal + total_tax - total_discount
+        total_amount = subtotal
         
         # Create sale
         sale = Sale.objects.create(
             tenant=user.tenant,
             sale_number=sale_number,
             subtotal=subtotal,
-            tax_amount=total_tax,
-            discount_amount=total_discount,
             total_amount=total_amount,
             status='completed',
             created_by=user,
@@ -193,7 +191,7 @@ class SaleCreateSerializer(serializers.ModelSerializer):
         
         # Create sale items and update stock
         for item_data in processed_items:
-            # Create sale item
+            # Create sale item with cost
             SaleItem.objects.create(
                 sale=sale,
                 product=item_data['product'],
@@ -202,7 +200,6 @@ class SaleCreateSerializer(serializers.ModelSerializer):
                 total_price=item_data['total_price'],
                 unit_cost=item_data['unit_cost'],
                 total_cost=item_data['total_cost'],
-                discount_amount=item_data['discount_amount']
             )
             
             # Update stock
@@ -230,8 +227,6 @@ class SaleCreateSerializer(serializers.ModelSerializer):
         
         # Create invoice
         due_date = timezone.now().date() + timedelta(days=30)
-        
-        # Generate invoice number
         invoice_number = f"INV-{timestamp}-{random_num}"
         
         invoice = Invoice.objects.create(
@@ -245,10 +240,12 @@ class SaleCreateSerializer(serializers.ModelSerializer):
             status='sent'
         )
         
-        # Handle payment if paid
+        # Handle payment if not credit
         if validated_data.get('payment_method') != 'credit':
-            # Create payment record
             payment_number = f"PAY-{timestamp}-{random_num}"
+            
+            # Get paid amount from request data
+            paid_amount = Decimal(str(validated_data.get('paid_amount', total_amount)))
             
             payment = Payment.objects.create(
                 tenant=user.tenant,
@@ -257,21 +254,22 @@ class SaleCreateSerializer(serializers.ModelSerializer):
                 invoice=invoice,
                 customer=validated_data.get('customer'),
                 payment_number=payment_number,
-                amount=total_amount,
+                amount=paid_amount,
                 payment_method=validated_data['payment_method'],
-                received_by=user
+                received_by=user,
+                notes="Payment from sale"
             )
             
             # Update sale paid amount
-            sale.paid_amount = total_amount
+            sale.paid_amount = paid_amount
             sale.save()
             
             # Update invoice paid amount
-            invoice.paid_amount = total_amount
+            invoice.paid_amount = paid_amount
             invoice.save()
             
             # Update cash register
-            self.update_cash_register(sale, total_amount, 'in', user)
+            self.update_cash_register(sale, paid_amount, 'in', user)
         
         return sale
     
@@ -297,7 +295,6 @@ class SaleCreateSerializer(serializers.ModelSerializer):
             
             register.save()
             
-            # Create transaction record
             CashRegisterTransaction.objects.create(
                 tenant=sale.tenant,
                 branch=sale.branch,
@@ -312,7 +309,6 @@ class SaleCreateSerializer(serializers.ModelSerializer):
                 created_by=user
             )
         except Exception as e:
-            # Log error but don't fail the sale
             print(f"Error updating cash register: {e}")
 
 

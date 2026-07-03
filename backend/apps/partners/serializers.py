@@ -1,3 +1,5 @@
+from decimal import Decimal
+from django.db.models import Sum
 from rest_framework import serializers
 from .models import Supplier, Customer
 
@@ -19,15 +21,19 @@ class SupplierSerializer(serializers.ModelSerializer):
 
 class CustomerSerializer(serializers.ModelSerializer):
     outstanding_balance = serializers.SerializerMethodField()
+    total_sales = serializers.SerializerMethodField()
     
     class Meta:
         model = Customer
         fields = [
             'id', 'name', 'phone', 'email', 'address', 'city',
             'gender', 'birth_date', 'is_active',
-            'outstanding_balance', 'created_at', 'updated_at'
+            'outstanding_balance', 'total_sales', 'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'created_at', 'updated_at', 'sync_version']
 
     def get_outstanding_balance(self, obj):
         return obj.get_outstanding_balance()
+    
+    def get_total_sales(self, obj):
+        return obj.get_total_sales()
