@@ -1,10 +1,15 @@
 from django.contrib import admin
 from django.urls import path, include
+from django.http import JsonResponse
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView, SpectacularRedocView
 
+def health_check(request):
+    return JsonResponse({'status': 'ok', 'message': 'Elite RDC API is running'})
+
 urlpatterns = [
+    path('', health_check, name='health'),
     path('admin/', admin.site.urls),
-    # API routes
+    # API routes - all under /api/
     path('api/', include('apps.users.urls')),
     path('api/', include('apps.tenants.urls')),
     path('api/', include('apps.branches.urls')),
