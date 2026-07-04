@@ -48,6 +48,12 @@ import Units from './pages/company/Units'
 import Login from './pages/auth/Login'
 import Register from './pages/auth/Register'
 
+// Marketing Pages
+import MarketingHomepage from './marketing/pages/Homepage'
+import Features from './marketing/pages/Features'
+import Pricing from './marketing/pages/Pricing'
+import Contact from './marketing/pages/Contact'
+
 // Context
 import { AuthProvider } from './context/AuthContext'
 
@@ -56,6 +62,13 @@ function App() {
     <BrowserRouter>
       <AuthProvider>
         <Routes>
+          {/* Marketing / Landing Page - Public */}
+          <Route path="/" element={<MarketingHomepage />} />
+          <Route path="/features" element={<Features />} />
+          <Route path="/pricing" element={<Pricing />} />
+          <Route path="/contact" element={<Contact />} />
+
+          
           {/* Auth Routes - Public */}
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
@@ -116,6 +129,11 @@ function App() {
                 </ProtectedRoute>
               } 
             />
+            
+            {/* Categories, Brands, Units */}
+            <Route path="categories" element={<Categories />} />
+            <Route path="brands" element={<Brands />} />
+            <Route path="units" element={<Units />} />
             
             {/* Customers */}
             <Route 
@@ -324,10 +342,6 @@ function App() {
                 </ProtectedRoute>
               } 
             />
-
-            <Route path="categories" element={<Categories />} />
-            <Route path="brands" element={<Brands />} />
-            <Route path="units" element={<Units />} />
             
             {/* Reports */}
             <Route 
@@ -410,9 +424,8 @@ function App() {
             />
           </Route>
           
-          {/* Default redirect */}
-          <Route path="/" element={<Navigate to="/app/dashboard" replace />} />
-          <Route path="*" element={<Navigate to="/app/dashboard" replace />} />
+          {/* Catch all - redirect to homepage */}
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </AuthProvider>
     </BrowserRouter>
