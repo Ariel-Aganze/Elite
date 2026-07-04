@@ -46,9 +46,9 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    'corsheaders.middleware.CorsMiddleware',  # MUST be at the top
     'django.middleware.security.SecurityMiddleware',
-    'corsheaders.middleware.CorsMiddleware',
-    'whitenoise.middleware.WhiteNoiseMiddleware',  # Add for static files
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.locale.LocaleMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -152,9 +152,59 @@ SIMPLE_JWT = {
     'USER_ID_CLAIM': 'user_id',
 }
 
-# CORS - Allow frontend domain
-CORS_ALLOWED_ORIGINS = config('CORS_ALLOWED_ORIGINS', default='').split(',')
+# ============ CORS CONFIGURATION - FIXED ============
+# Get allowed origins from environment variable
+cors_origins = config('CORS_ALLOWED_ORIGINS', default='')
+
+# Default origins (development)
+default_origins = [
+    "http://localhost:5173",
+    "http://localhost:3000",
+    "http://127.0.0.1:5173",
+    "http://127.0.0.1:3000",
+]
+
+# Parse environment variable if it exists
+if cors_origins:
+    CORS_ALLOWED_ORIGINS = [
+        origin.strip().rstrip('/') 
+        for origin in cors_origins.split(',') 
+        if origin.strip()
+    ]
+else:
+    CORS_ALLOWED_ORIGINS = default_origins
+
+# Always allow credentials
 CORS_ALLOW_CREDENTIALS = True
+
+# Allow all methods
+CORS_ALLOW_METHODS = [
+    'DELETE',
+    'GET',
+    'OPTIONS',
+    'PATCH',
+    'POST',
+    'PUT',
+]
+
+# Allow all headers
+CORS_ALLOW_HEADERS = [
+    'accept',
+    'accept-encoding',
+    'authorization',
+    'content-type',
+    'dnt',
+    'origin',
+    'user-agent',
+    'x-csrftoken',
+    'x-requested-with',
+]
+
+# For production, you can also use this if you want to allow your frontend only
+# CORS_ALLOWED_ORIGINS = [
+#     "https://elite-010z.onrender.com",
+#     "https://elite-frontend.onrender.com",
+# ] + default_origins
 
 # drf-spectacular settings
 SPECTACULAR_SETTINGS = {
