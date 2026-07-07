@@ -2,7 +2,10 @@ from rest_framework import serializers
 from django.db import transaction
 from decimal import Decimal
 from apps.catalog.models import Product
+from apps.partners.models import Supplier
+from apps.branches.models import Branch
 from .models import PurchaseOrder, PurchaseItem, PurchaseReception, PurchaseReceptionItem
+
 
 class PurchaseItemSerializer(serializers.ModelSerializer):
     product_name = serializers.CharField(source='product.name', read_only=True)
@@ -69,8 +72,16 @@ class PurchaseOrderDetailSerializer(serializers.ModelSerializer):
         return obj.get_total_landed_cost()
 
 
+class PurchaseItemCreateSerializer(serializers.Serializer):
+    """Serializer for creating purchase items"""
+    product = serializers.PrimaryKeyRelatedField(queryset=Product.objects.all())
+    quantity = serializers.IntegerField(min_value=1)
+    unit_price = serializers.DecimalField(max_digits=15, decimal_places=2, min_value=Decimal('0.01'))
+
+
 class PurchaseOrderCreateSerializer(serializers.ModelSerializer):
-    items = PurchaseItemSerializer(many=True)
+    """Serializer for creating purchase orders"""
+    items = PurchaseItemCreateSerializer(many=True)
     
     class Meta:
         model = PurchaseOrder
@@ -81,19 +92,30 @@ class PurchaseOrderCreateSerializer(serializers.ModelSerializer):
         ]
 
     def validate(self, data):
-        # Check that supplier belongs to the same tenant
         user = self.context['request'].user
-        if data['supplier'].tenant != user.tenant:
-            raise serializers.ValidationError("Supplier does not belong to your company.")
         
-        # Check that branch belongs to the same tenant
-        if data['branch'].tenant != user.tenant:
-            raise serializers.ValidationError("Branch does not belong to your company.")
+        if data.get('supplier'):
+            if data['supplier'].tenant != user.tenant:
+                raise serializers.ValidationError({"supplier": "Supplier does not belong to your company."})
         
-        # Check all products belong to the same tenant
-        for item in data['items']:
-            if item['product'].tenant != user.tenant:
-                raise serializers.ValidationError(f"Product {item['product'].name} does not belong to your company.")
+        if data.get('branch'):
+            if data['branch'].tenant != user.tenant:
+                raise serializers.ValidationError({"branch": "Branch does not belong to your company."})
+        
+        if data.get('items'):
+            for idx, item in enumerate(data['items']):
+                if item['product'].tenant != user.tenant:
+                    raise serializers.ValidationError(
+                        {"items": f"Product '{item['product'].name}' does not belong to your company."}
+                    )
+                if item['quantity'] <= 0:
+                    raise serializers.ValidationError(
+                        {"items": f"Quantity must be greater than 0 for '{item['product'].name}'."}
+                    )
+                if item['unit_price'] <= 0:
+                    raise serializers.ValidationError(
+                        {"items": f"Unit price must be greater than 0 for '{item['product'].name}'."}
+                    )
         
         return data
 
@@ -102,22 +124,18 @@ class PurchaseOrderCreateSerializer(serializers.ModelSerializer):
         items_data = validated_data.pop('items')
         user = self.context['request'].user
         
-        # Generate order number
         from datetime import datetime
         import random
         timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
         random_num = random.randint(1000, 9999)
         order_number = f"PO-{timestamp}-{random_num}"
         
-        # Calculate subtotal
         subtotal = Decimal('0')
         for item in items_data:
             subtotal += item['quantity'] * item['unit_price']
         
-        # Calculate total amount (subtotal + tax - discount)
-        total_amount = subtotal  # For now, we'll handle tax/discount later
+        total_amount = subtotal
         
-        # Create purchase order
         purchase_order = PurchaseOrder.objects.create(
             tenant=user.tenant,
             order_number=order_number,
@@ -126,7 +144,6 @@ class PurchaseOrderCreateSerializer(serializers.ModelSerializer):
             **validated_data
         )
         
-        # Create purchase items
         for item_data in items_data:
             PurchaseItem.objects.create(
                 purchase_order=purchase_order,
@@ -137,6 +154,53 @@ class PurchaseOrderCreateSerializer(serializers.ModelSerializer):
             )
         
         return purchase_order
+
+
+class PurchaseOrderUpdateSerializer(serializers.ModelSerializer):
+    """Serializer for updating purchase orders (PATCH)"""
+    
+    class Meta:
+        model = PurchaseOrder
+        fields = [
+            'supplier', 'branch', 'expected_delivery_date',
+            'transport_cost', 'customs_cost', 'handling_cost', 'other_costs',
+            'currency', 'exchange_rate', 'notes', 'paid_amount', 'status'
+        ]
+        extra_kwargs = {
+            'supplier': {'required': False},
+            'branch': {'required': False},
+            'paid_amount': {'required': False, 'min_value': 0},
+            'status': {'required': False},
+            'transport_cost': {'required': False},
+            'customs_cost': {'required': False},
+            'handling_cost': {'required': False},
+            'other_costs': {'required': False},
+            'currency': {'required': False},
+            'exchange_rate': {'required': False},
+            'notes': {'required': False},
+        }
+
+    def validate(self, data):
+        user = self.context['request'].user
+        instance = self.instance
+        
+        if data.get('supplier'):
+            if data['supplier'].tenant != user.tenant:
+                raise serializers.ValidationError({"supplier": "Supplier does not belong to your company."})
+        
+        if data.get('branch'):
+            if data['branch'].tenant != user.tenant:
+                raise serializers.ValidationError({"branch": "Branch does not belong to your company."})
+        
+        if 'paid_amount' in data:
+            paid = Decimal(str(data['paid_amount']))
+            total = instance.total_amount
+            if paid > total:
+                raise serializers.ValidationError(
+                    {"paid_amount": f"Paid amount cannot exceed total amount ({total})."}
+                )
+        
+        return data
 
 
 class PurchaseOrderUpdateStatusSerializer(serializers.Serializer):

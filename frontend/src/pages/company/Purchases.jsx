@@ -309,7 +309,7 @@ const Purchases = () => {
                             <Eye className="w-4 h-4" />
                           </button>
 
-                        // In the actions column of the table, add this button
+                        
                         {purchase.status !== 'received' && purchase.status !== 'cancelled' && (
                             <button
                                 onClick={() => navigate(`/app/purchases/${purchase.id}/receive`)}

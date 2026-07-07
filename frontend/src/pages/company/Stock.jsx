@@ -108,7 +108,6 @@ const Stock = () => {
       }
     } catch (error) {
       toast.error('Erreur lors du chargement du stock')
-      console.error('Stock fetch error:', error)
     } finally {
       setLoading(false)
     }
@@ -131,11 +130,18 @@ const Stock = () => {
     return { label: 'En stock', className: 'bg-green-100 text-green-800' }
   }
 
-  const handleViewProduct = (productId) => {
-    if (productId) {
-      navigate(`/app/products/${productId}`)
+  const getBranchName = (branchId) => {
+    const branch = branches.find(b => b.id === branchId)
+    return branch ? branch.name : '—'
+  }
+
+  const handleViewStock = (productId, branchId) => {
+    if (productId && branchId) {
+      navigate(`/app/stock/${productId}?branch=${branchId}`)
+    } else if (productId) {
+      navigate(`/app/stock/${productId}`)
     } else {
-      toast.error('ID du produit non disponible')
+      toast.error('Informations du produit non disponibles')
     }
   }
 
@@ -310,6 +316,9 @@ const Stock = () => {
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       SKU
                     </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Succursale
+                    </th>
                     <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Quantité
                     </th>
@@ -333,11 +342,11 @@ const Stock = () => {
                 <tbody className="divide-y divide-gray-200">
                   {stockData.map((item) => {
                     const status = getStockStatus(item)
-                    // Use the fields from the serializer
                     const productName = item.product_name || '—'
                     const productSku = item.product_sku || '—'
                     const productId = item.product_id || item.product
                     const minStock = item.product_min_stock || 0
+                    const branchName = getBranchName(item.branch)
                     
                     return (
                       <tr key={item.id} className="hover:bg-gray-50 transition-colors">
@@ -355,6 +364,12 @@ const Stock = () => {
                           <code className="text-xs font-mono bg-gray-100 px-2 py-1 rounded">
                             {productSku}
                           </code>
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center space-x-2">
+                            <Store className="w-4 h-4 text-gray-400" />
+                            <span className="text-sm font-medium text-gray-700">{branchName}</span>
+                          </div>
                         </td>
                         <td className="px-4 py-3 text-right">
                           <span className={`font-semibold ${
@@ -382,10 +397,9 @@ const Stock = () => {
                         <td className="px-4 py-3 text-right">
                           <div className="flex items-center justify-end space-x-2">
                             <button
-                              onClick={() => handleViewProduct(productId)}
+                              onClick={() => handleViewStock(productId, item.branch)}
                               className="p-1 text-gray-400 hover:text-primary-600 transition-colors"
-                              title="Voir produit"
-                              disabled={!productId}
+                              title="Voir détails du stock"
                             >
                               <Eye className="w-4 h-4" />
                             </button>
@@ -393,7 +407,6 @@ const Stock = () => {
                               onClick={() => handleAdjustStock(productId)}
                               className="p-1 text-gray-400 hover:text-blue-600 transition-colors"
                               title="Ajuster"
-                              disabled={!productId}
                             >
                               <Edit className="w-4 h-4" />
                             </button>

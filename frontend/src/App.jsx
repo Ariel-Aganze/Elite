@@ -22,13 +22,17 @@ import NewSale from './pages/company/NewSale'
 import SalesList from './pages/company/SalesList'
 import SaleDetail from './pages/company/SaleDetail'
 import Stock from './pages/company/Stock'
+import StockDetail from './pages/company/StockDetail'
 import AdjustmentForm from './pages/company/AdjustmentForm'
 import Suppliers from './pages/company/Suppliers'
 import SupplierForm from './pages/company/SupplierForm'
+import SupplierDetail from './pages/company/SupplierDetail'
 import Purchases from './pages/company/Purchases'
+import PurchaseDetail from './pages/company/PurchaseDetail'
 import PurchaseForm from './pages/company/PurchaseForm'
 import PurchaseReception from './pages/company/PurchaseReception'
 import Transfers from './pages/company/Transfers'
+import TransferDetail from './pages/company/TransferDetail'
 import TransferForm from './pages/company/TransferForm'
 import Expenses from './pages/company/Expenses'
 import ExpenseForm from './pages/company/ExpenseForm'
@@ -68,7 +72,6 @@ function App() {
           <Route path="/pricing" element={<Pricing />} />
           <Route path="/contact" element={<Contact />} />
 
-          
           {/* Auth Routes - Public */}
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
@@ -86,7 +89,7 @@ function App() {
           <Route path="/app" element={<CompanyLayout />}>
             <Route index element={<Navigate to="/app/dashboard" replace />} />
             
-            {/* Dashboard - Requires reports_view */}
+            {/* Dashboard */}
             <Route 
               path="dashboard" 
               element={
@@ -190,7 +193,7 @@ function App() {
               path="suppliers/:id" 
               element={
                 <ProtectedRoute requiredPermission="suppliers_manage">
-                  <SupplierForm />
+                  <SupplierDetail />
                 </ProtectedRoute>
               } 
             />
@@ -239,6 +242,14 @@ function App() {
               } 
             />
             <Route 
+              path="stock/:productId" 
+              element={
+                <ProtectedRoute requiredPermission="stock_view">
+                  <StockDetail />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
               path="adjustments/new" 
               element={
                 <ProtectedRoute requiredPermission="stock_adjust">
@@ -268,7 +279,7 @@ function App() {
               path="purchases/:id" 
               element={
                 <ProtectedRoute requiredPermission="purchases_view">
-                  <PurchaseForm />
+                  <PurchaseDetail />
                 </ProtectedRoute>
               } 
             />
@@ -303,6 +314,14 @@ function App() {
               element={
                 <ProtectedRoute requiredPermission="transfers_create">
                   <TransferForm />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="transfers/:id" 
+              element={
+                <ProtectedRoute requiredPermission="transfers_view">
+                  <TransferDetail />
                 </ProtectedRoute>
               } 
             />
@@ -353,7 +372,7 @@ function App() {
               } 
             />
             
-            {/* Users - Admin only */}
+            {/* Users */}
             <Route 
               path="users" 
               element={
@@ -379,7 +398,7 @@ function App() {
               } 
             />
             
-            {/* Branches - Admin only */}
+            {/* Branches */}
             <Route 
               path="branches" 
               element={
@@ -413,7 +432,7 @@ function App() {
               } 
             />
             
-            {/* Settings - Admin only */}
+            {/* Settings */}
             <Route 
               path="settings" 
               element={

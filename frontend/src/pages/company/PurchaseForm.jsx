@@ -189,14 +189,14 @@ const PurchaseForm = () => {
       const data = {
         supplier: formData.supplier,
         branch: formData.branch,
-        expected_delivery_date: formData.expected_delivery_date,
+        expected_delivery_date: formData.expected_delivery_date || null,
         transport_cost: parseFloat(formData.transport_cost) || 0,
         customs_cost: parseFloat(formData.customs_cost) || 0,
         handling_cost: parseFloat(formData.handling_cost) || 0,
         other_costs: parseFloat(formData.other_costs) || 0,
         currency: formData.currency,
         exchange_rate: parseFloat(formData.exchange_rate) || 1,
-        notes: formData.notes,
+        notes: formData.notes || '',
         items: items.map(item => ({
           product: item.product_id,
           quantity: item.quantity,
@@ -214,11 +214,46 @@ const PurchaseForm = () => {
       }
       navigate('/app/purchases')
     } catch (error) {
+      // Handle validation errors properly
       if (error.response?.data) {
-        setErrors(error.response.data)
-        toast.error('Erreur lors de l\'enregistrement')
+        const errorData = error.response.data
+        console.error('Validation errors:', errorData)
+        
+        // If it's a string, display it
+        if (typeof errorData === 'string') {
+          toast.error(errorData)
+        } 
+        // If it's an object with error messages
+        else if (typeof errorData === 'object') {
+          // Check if it's a Django validation error
+          if (errorData.message) {
+            toast.error(errorData.message)
+          } else {
+            // Build error messages from fields
+            const messages = []
+            Object.keys(errorData).forEach(key => {
+              if (Array.isArray(errorData[key])) {
+                messages.push(`${key}: ${errorData[key].join(', ')}`)
+              } else if (typeof errorData[key] === 'object') {
+                // Handle nested errors like items
+                if (key === 'items' && Array.isArray(errorData[key])) {
+                  errorData[key].forEach((itemError, idx) => {
+                    if (typeof itemError === 'object') {
+                      Object.keys(itemError).forEach(field => {
+                        messages.push(`Item ${idx + 1} - ${field}: ${itemError[field]}`)
+                      })
+                    }
+                  })
+                }
+              } else {
+                messages.push(`${key}: ${errorData[key]}`)
+              }
+            })
+            toast.error(messages.join('. ') || 'Erreur de validation')
+          }
+        }
       } else {
-        toast.error('Erreur de connexion')
+        toast.error('Erreur de connexion. Vérifiez votre connexion internet.')
       }
     } finally {
       setSaving(false)
@@ -259,6 +294,23 @@ const PurchaseForm = () => {
           </div>
         </div>
       </div>
+
+      {/* Display validation errors */}
+      {Object.keys(errors).length > 0 && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+          <div className="flex items-start space-x-2">
+            <AlertCircle className="w-5 h-5 text-red-500 mt-0.5 flex-shrink-0" />
+            <div>
+              <p className="font-medium text-red-800">Erreur de validation</p>
+              <ul className="mt-1 space-y-1 text-sm text-red-700">
+                {Object.keys(errors).map((key) => (
+                  <li key={key}>{key}: {Array.isArray(errors[key]) ? errors[key].join(', ') : errors[key]}</li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        </div>
+      )}
 
       <form onSubmit={handleSubmit}>
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

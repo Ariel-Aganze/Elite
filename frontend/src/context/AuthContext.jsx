@@ -18,22 +18,57 @@ export const AuthProvider = ({ children }) => {
   const [isAuthenticated, setIsAuthenticated] = useState(false)
 
   useEffect(() => {
-    const token = localStorage.getItem('access_token')
-    const storedUser = localStorage.getItem('user')
-    
-    if (token && storedUser) {
-      try {
-        setAuthToken(token)
-        const userData = JSON.parse(storedUser)
-        setUser(userData)
-        setIsAuthenticated(true)
-      } catch (error) {
-        localStorage.removeItem('access_token')
-        localStorage.removeItem('user')
+    // This runs only once on app initialization
+    const initializeAuth = async () => {
+      const token = localStorage.getItem('access_token')
+      const storedUser = localStorage.getItem('user')
+      
+      if (token && storedUser) {
+        try {
+          // Set the token in axios headers
+          setAuthToken(token)
+          
+          // Parse user data
+          const userData = JSON.parse(storedUser)
+          setUser(userData)
+          setIsAuthenticated(true)
+          
+          // Optionally: Verify token validity with a quick API call
+          // This is optional but helps detect expired tokens
+          try {
+            // Just a simple check - you could call a /verify endpoint
+            // or just trust the token for now
+          } catch (verifyError) {
+            // If verification fails, clear everything
+            console.warn('Token verification failed, logging out')
+            localStorage.removeItem('access_token')
+            localStorage.removeItem('refresh_token')
+            localStorage.removeItem('user')
+            setAuthToken(null)
+            setUser(null)
+            setIsAuthenticated(false)
+          }
+        } catch (error) {
+          // If there's an error parsing user data, clear everything
+          console.error('Error restoring auth state:', error)
+          localStorage.removeItem('access_token')
+          localStorage.removeItem('refresh_token')
+          localStorage.removeItem('user')
+          setAuthToken(null)
+          setUser(null)
+          setIsAuthenticated(false)
+        }
+      } else {
+        // No token found, ensure clean state
         setAuthToken(null)
+        setUser(null)
+        setIsAuthenticated(false)
       }
+      
+      setLoading(false)
     }
-    setLoading(false)
+    
+    initializeAuth()
   }, [])
 
   const login = async (username, password) => {

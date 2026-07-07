@@ -13,7 +13,7 @@ SECRET_KEY = config('SECRET_KEY')
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = config('DEBUG', default=False, cast=bool)
 
-ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost').split(',')
+ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1').split(',')
 
 # Application definition
 INSTALLED_APPS = [
@@ -79,14 +79,48 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'config.wsgi.application'
 
-# Database - Use DATABASE_URL from environment
-DATABASES = {
-    'default': dj_database_url.config(
-        default=config('DATABASE_URL'),
-        conn_max_age=600,
-        conn_health_checks=True,
-    )
-}
+# ============ DATABASE CONFIGURATION - WITH FALLBACKS ============
+# Try to get DATABASE_URL from environment, fallback to local PostgreSQL
+DATABASE_URL = config('DATABASE_URL', default='')
+
+if DATABASE_URL:
+    # Production - Use DATABASE_URL from environment
+    DATABASES = {
+        'default': dj_database_url.config(
+            default=DATABASE_URL,
+            conn_max_age=600,
+            conn_health_checks=True,
+        )
+    }
+else:
+    # Development - Use local PostgreSQL or SQLite
+    # Check if we should use PostgreSQL locally
+    DB_NAME = config('DB_NAME', default='elite_db')
+    DB_USER = config('DB_USER', default='postgres')
+    DB_PASSWORD = config('DB_PASSWORD', default='')
+    DB_HOST = config('DB_HOST', default='localhost')
+    DB_PORT = config('DB_PORT', default='5432')
+    
+    # If PostgreSQL credentials are provided, use PostgreSQL
+    if DB_PASSWORD:
+        DATABASES = {
+            'default': {
+                'ENGINE': 'django.db.backends.postgresql',
+                'NAME': DB_NAME,
+                'USER': DB_USER,
+                'PASSWORD': DB_PASSWORD,
+                'HOST': DB_HOST,
+                'PORT': DB_PORT,
+            }
+        }
+    else:
+        # Fallback to SQLite for development
+        DATABASES = {
+            'default': {
+                'ENGINE': 'django.db.backends.sqlite3',
+                'NAME': BASE_DIR / 'db.sqlite3',
+            }
+        }
 
 # Password validation
 AUTH_PASSWORD_VALIDATORS = [
@@ -152,7 +186,7 @@ SIMPLE_JWT = {
     'USER_ID_CLAIM': 'user_id',
 }
 
-# ============ CORS CONFIGURATION - FIXED ============
+# ============ CORS CONFIGURATION ============
 # Get allowed origins from environment variable
 cors_origins = config('CORS_ALLOWED_ORIGINS', default='')
 
@@ -171,6 +205,10 @@ if cors_origins:
         for origin in cors_origins.split(',') 
         if origin.strip()
     ]
+    # Add default origins for development
+    CORS_ALLOWED_ORIGINS.extend(default_origins)
+    # Remove duplicates
+    CORS_ALLOWED_ORIGINS = list(set(CORS_ALLOWED_ORIGINS))
 else:
     CORS_ALLOWED_ORIGINS = default_origins
 
@@ -199,12 +237,6 @@ CORS_ALLOW_HEADERS = [
     'x-csrftoken',
     'x-requested-with',
 ]
-
-# For production, you can also use this if you want to allow your frontend only
-# CORS_ALLOWED_ORIGINS = [
-#     "https://elite-010z.onrender.com",
-#     "https://elite-frontend.onrender.com",
-# ] + default_origins
 
 # drf-spectacular settings
 SPECTACULAR_SETTINGS = {

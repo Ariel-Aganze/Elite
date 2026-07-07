@@ -34,10 +34,18 @@ const TransferForm = () => {
   const [items, setItems] = useState([])
   const [errors, setErrors] = useState({})
   const [stockInfo, setStockInfo] = useState({})
+  const [loadingStock, setLoadingStock] = useState(false)
 
   useEffect(() => {
     fetchInitialData()
   }, [])
+
+  // Fetch stock when source branch changes
+  useEffect(() => {
+    if (formData.from_branch) {
+      fetchAllStock()
+    }
+  }, [formData.from_branch])
 
   const fetchInitialData = async () => {
     try {
@@ -60,28 +68,42 @@ const TransferForm = () => {
     }
   }
 
-  // Fetch stock when branch or product changes
-  useEffect(() => {
-    if (formData.from_branch && items.length > 0) {
-      fetchStockInfo()
-    }
-  }, [formData.from_branch])
-
-  const fetchStockInfo = async () => {
+  const fetchAllStock = async () => {
+    if (!formData.from_branch) return
+    
+    setLoadingStock(true)
     try {
-      const productIds = items.map(item => item.product_id).join(',')
-      if (!productIds) return
-      
       const response = await api.get(`/stock/?branch=${formData.from_branch}`)
       const stocks = response.data.results || response.data || []
       
       const stockMap = {}
       stocks.forEach(s => {
-        stockMap[s.product] = s.quantity || 0
+        const productId = s.product || s.product_id
+        if (productId) {
+          stockMap[productId] = {
+            quantity: s.quantity || 0,
+            average_cost: s.average_cost || 0,
+          }
+        }
       })
       setStockInfo(stockMap)
+      
+      // Update existing items with current stock info
+      setItems(prevItems => 
+        prevItems.map(item => {
+          const stock = stockMap[item.product_id] || { quantity: 0 }
+          return {
+            ...item,
+            current_stock: stock.quantity,
+            max_quantity: stock.quantity,
+          }
+        })
+      )
     } catch (error) {
       console.error('Error fetching stock:', error)
+      toast.error('Erreur lors du chargement du stock')
+    } finally {
+      setLoadingStock(false)
     }
   }
 
@@ -95,14 +117,20 @@ const TransferForm = () => {
       p.name.toLowerCase().includes(value.toLowerCase()) ||
       p.sku.toLowerCase().includes(value.toLowerCase())
     )
-    // Exclude already added products
     const existingIds = items.map(i => i.product_id)
     const filtered = results.filter(p => !existingIds.includes(p.id))
     setSearchResults(filtered.slice(0, 10))
   }
 
   const addItem = (product) => {
-    const currentStock = stockInfo[product.id] || 0
+    const stock = stockInfo[product.id] || { quantity: 0 }
+    const currentStock = stock.quantity || 0
+    
+    if (currentStock === 0) {
+      toast.error(`Le produit "${product.name}" n'a pas de stock disponible`)
+      return
+    }
+    
     setItems([...items, {
       product_id: product.id,
       product_name: product.name,
@@ -113,18 +141,17 @@ const TransferForm = () => {
     }])
     setSearchTerm('')
     setSearchResults([])
+    toast.success(`"${product.name}" ajouté au transfert`)
   }
 
-  const updateItem = (index, field, value) => {
-    const newItems = [...items]
-    const numValue = parseInt(value) || 0
-    const maxStock = newItems[index].current_stock || 0
+  const updateItemQuantity = (index, newQuantity) => {
+    const item = items[index]
+    const maxStock = item.current_stock || 0
+    // Ensure quantity is between 1 and max stock
+    const validatedQuantity = Math.min(Math.max(1, newQuantity), maxStock)
     
-    if (field === 'quantity') {
-      newItems[index].quantity = Math.min(Math.max(1, numValue), maxStock)
-    } else {
-      newItems[index][field] = value
-    }
+    const newItems = [...items]
+    newItems[index].quantity = validatedQuantity
     setItems(newItems)
   }
 
@@ -141,7 +168,6 @@ const TransferForm = () => {
     }
     if (items.length === 0) newErrors.items = 'Ajoutez au moins un produit'
     
-    // Check quantities against stock
     for (const item of items) {
       if (item.quantity > (item.current_stock || 0)) {
         newErrors[`item_${item.product_id}`] = `Stock insuffisant pour ${item.product_name}`
@@ -173,8 +199,20 @@ const TransferForm = () => {
       navigate('/app/transfers')
     } catch (error) {
       if (error.response?.data) {
-        setErrors(error.response.data)
-        toast.error('Erreur lors de la création')
+        const errorData = error.response.data
+        if (typeof errorData === 'object') {
+          const messages = []
+          Object.keys(errorData).forEach(key => {
+            if (Array.isArray(errorData[key])) {
+              messages.push(`${key}: ${errorData[key].join(', ')}`)
+            } else {
+              messages.push(`${key}: ${errorData[key]}`)
+            }
+          })
+          toast.error(messages.join('. '))
+        } else {
+          toast.error(errorData || 'Erreur lors de la création')
+        }
       } else {
         toast.error('Erreur de connexion')
       }
@@ -186,6 +224,17 @@ const TransferForm = () => {
   const getBranchName = (id) => {
     const branch = branches.find(b => b.id === id)
     return branch ? branch.name : ''
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="text-center">
+          <Loader2 className="w-12 h-12 text-primary-600 animate-spin mx-auto mb-4" />
+          <p className="text-gray-500">Chargement...</p>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -290,24 +339,34 @@ const TransferForm = () => {
                 />
                 {searchResults.length > 0 && (
                   <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-dropdown max-h-48 overflow-y-auto z-10">
-                    {searchResults.map((product) => (
-                      <button
-                        key={product.id}
-                        onClick={() => addItem(product)}
-                        className="w-full px-4 py-2 text-left hover:bg-gray-50 flex items-center justify-between border-b border-gray-100 last:border-0"
-                      >
-                        <div>
-                          <p className="font-medium text-gray-900">{product.name}</p>
-                          <p className="text-sm text-gray-500">{product.sku}</p>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-sm text-gray-500">Stock: {stockInfo[product.id] || 0}</p>
-                        </div>
-                      </button>
-                    ))}
+                    {searchResults.map((product) => {
+                      const stock = stockInfo[product.id] || { quantity: 0 }
+                      return (
+                        <button
+                          key={product.id}
+                          onClick={() => addItem(product)}
+                          className="w-full px-4 py-2 text-left hover:bg-gray-50 flex items-center justify-between border-b border-gray-100 last:border-0"
+                        >
+                          <div>
+                            <p className="font-medium text-gray-900">{product.name}</p>
+                            <p className="text-sm text-gray-500">{product.sku}</p>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-sm text-gray-500">Stock: {stock.quantity || 0}</p>
+                          </div>
+                        </button>
+                      )
+                    })}
                   </div>
                 )}
               </div>
+
+              {loadingStock && (
+                <div className="text-center py-4 text-gray-500">
+                  <Loader2 className="w-6 h-6 animate-spin mx-auto" />
+                  <p className="text-sm mt-2">Chargement du stock...</p>
+                </div>
+              )}
 
               {errors.items && (
                 <p className="mb-4 text-sm text-red-600">{errors.items}</p>
@@ -327,22 +386,31 @@ const TransferForm = () => {
                       <div className="flex-1 min-w-0">
                         <p className="font-medium text-gray-900 truncate">{item.product_name}</p>
                         <p className="text-sm text-gray-500">{item.product_sku}</p>
-                        <p className="text-xs text-gray-400">Stock: {item.current_stock || 0}</p>
+                        <p className="text-xs text-gray-400">Stock disponible: {item.current_stock || 0}</p>
                       </div>
                       <div className="flex items-center space-x-3">
                         <div className="flex items-center space-x-2">
                           <button
-                            onClick={() => updateItem(index, 'quantity', item.quantity - 1)}
-                            className="p-1 hover:bg-gray-200 rounded"
+                            type="button"
+                            onClick={() => updateItemQuantity(index, item.quantity - 1)}
+                            className="p-1 hover:bg-gray-200 rounded disabled:opacity-50 disabled:cursor-not-allowed"
                             disabled={item.quantity <= 1}
                           >
                             <Minus className="w-4 h-4 text-gray-500" />
                           </button>
-                          <span className="w-12 text-center font-medium">{item.quantity}</span>
+                          <input
+                            type="number"
+                            value={item.quantity}
+                            onChange={(e) => updateItemQuantity(index, parseInt(e.target.value) || 1)}
+                            className="w-16 px-2 py-1 border border-gray-300 rounded text-center focus:outline-none focus:ring-2 focus:ring-primary-500"
+                            min="1"
+                            max={item.current_stock || 0}
+                          />
                           <button
-                            onClick={() => updateItem(index, 'quantity', item.quantity + 1)}
-                            className="p-1 hover:bg-gray-200 rounded"
-                            disabled={item.quantity >= item.current_stock}
+                            type="button"
+                            onClick={() => updateItemQuantity(index, item.quantity + 1)}
+                            className="p-1 hover:bg-gray-200 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+                            disabled={item.quantity >= (item.current_stock || 0)}
                           >
                             <Plus className="w-4 h-4 text-gray-500" />
                           </button>
@@ -351,6 +419,7 @@ const TransferForm = () => {
                           <p className="text-xs text-red-600">{errors[`item_${item.product_id}`]}</p>
                         )}
                         <button
+                          type="button"
                           onClick={() => removeItem(index)}
                           className="p-1 hover:bg-red-100 rounded text-red-500"
                         >
@@ -426,7 +495,7 @@ const TransferForm = () => {
               <div className="space-y-3">
                 <button
                   type="submit"
-                  disabled={saving}
+                  disabled={saving || items.length === 0}
                   className="w-full btn-primary flex items-center justify-center space-x-2 py-2.5"
                 >
                   {saving ? (
@@ -445,6 +514,9 @@ const TransferForm = () => {
                   <span>Annuler</span>
                 </button>
               </div>
+              {items.length === 0 && (
+                <p className="mt-2 text-xs text-gray-400 text-center">Ajoutez au moins un produit</p>
+              )}
             </div>
           </div>
         </div>

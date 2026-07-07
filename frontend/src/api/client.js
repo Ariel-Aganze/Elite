@@ -1,10 +1,11 @@
 import axios from 'axios'
 import toast from 'react-hot-toast'
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api'
+// Get API URL from environment
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
-// Remove trailing slash if present and ensure /api is at the end
-const baseURL = API_URL.replace(/\/+$/, '') + '/api'
+// Remove trailing slash if present
+const baseURL = API_URL.replace(/\/+$/, '')
 
 export const api = axios.create({
   baseURL: baseURL,
@@ -25,12 +26,13 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 )
 
-// Response interceptor - handle token refresh
+// Response interceptor - handle token refresh and 401 errors
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config
     
+    // Handle 401 - Unauthorized
     if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true
       
@@ -50,6 +52,7 @@ api.interceptors.response.use(
         originalRequest.headers.Authorization = `Bearer ${access}`
         return api(originalRequest)
       } catch (refreshError) {
+        // Refresh failed - clear everything and redirect to login
         localStorage.removeItem('access_token')
         localStorage.removeItem('refresh_token')
         localStorage.removeItem('user')
@@ -58,6 +61,7 @@ api.interceptors.response.use(
       }
     }
     
+    // Handle other errors
     if (error.response?.status === 403) {
       toast.error('Vous n\'avez pas les permissions nécessaires')
     } else if (error.response?.status === 404) {

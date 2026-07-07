@@ -32,22 +32,29 @@ class Supplier(BaseModel):
     def __str__(self):
         return self.name
 
+    def get_total_purchases(self):
+        """Get total purchases amount for this supplier"""
+        from apps.purchases.models import PurchaseOrder
+        total = PurchaseOrder.objects.filter(
+            supplier=self,
+            status='received',
+            is_deleted=False
+        ).aggregate(total=Sum('total_amount'))['total']
+        return total or Decimal('0')
+
+    def get_total_paid(self):
+        """Get total paid amount to this supplier"""
+        from apps.purchases.models import PurchaseOrder
+        total = PurchaseOrder.objects.filter(
+            supplier=self,
+            status='received',
+            is_deleted=False
+        ).aggregate(total=Sum('paid_amount'))['total']
+        return total or Decimal('0')
+
     def get_outstanding_balance(self):
         """Get total amount owed to this supplier"""
-        from apps.purchases.models import PurchaseOrder
-        total_purchases = PurchaseOrder.objects.filter(
-            supplier=self,
-            status='received',
-            is_deleted=False
-        ).aggregate(total=Sum('total_amount'))['total'] or Decimal('0')
-        
-        total_paid = PurchaseOrder.objects.filter(
-            supplier=self,
-            status='received',
-            is_deleted=False
-        ).aggregate(total=Sum('paid_amount'))['total'] or Decimal('0')
-        
-        return total_purchases - total_paid
+        return self.get_total_purchases() - self.get_total_paid()
 
 
 class Customer(BaseModel):
