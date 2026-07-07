@@ -92,16 +92,16 @@ const PurchaseForm = () => {
         notes: data.notes || '',
       })
       
-      // Map items
-      if (data.items) {
+      // Map items - ensure we're extracting the right fields
+      if (data.items && Array.isArray(data.items)) {
         setItems(data.items.map(item => ({
           id: item.id,
           product_id: item.product,
-          product_name: item.product_name,
-          product_sku: item.product_sku,
-          quantity: item.quantity,
-          unit_price: parseFloat(item.unit_price),
-          total: parseFloat(item.total_price),
+          product_name: item.product_name || item.product?.name || '—',
+          product_sku: item.product_sku || item.product?.sku || '—',
+          quantity: item.quantity || 0,
+          unit_price: parseFloat(item.unit_price) || 0,
+          total: parseFloat(item.total_price) || 0,
         })))
       }
     } catch (error) {
@@ -129,13 +129,14 @@ const PurchaseForm = () => {
   }
 
   const addItem = (product) => {
+    const unitPrice = parseFloat(product.purchase_price) || 0
     setItems([...items, {
       product_id: product.id,
       product_name: product.name,
       product_sku: product.sku,
       quantity: 1,
-      unit_price: parseFloat(product.purchase_price) || 0,
-      total: parseFloat(product.purchase_price) || 0,
+      unit_price: unitPrice,
+      total: unitPrice * 1,
     }])
     setSearchTerm('')
     setSearchResults([])
@@ -143,9 +144,11 @@ const PurchaseForm = () => {
 
   const updateItem = (index, field, value) => {
     const newItems = [...items]
+    const numValue = parseFloat(value) || 0
+    
     if (field === 'quantity' || field === 'unit_price') {
-      const numValue = parseFloat(value) || 0
       newItems[index][field] = numValue
+      // Recalculate total
       newItems[index].total = newItems[index].quantity * newItems[index].unit_price
     } else {
       newItems[index][field] = value
@@ -414,7 +417,7 @@ const PurchaseForm = () => {
                           step="0.01"
                         />
                         <span className="font-semibold text-gray-900 w-24 text-right">
-                          ${item.total.toFixed(2)}
+                          ${item.total ? item.total.toFixed(2) : '0.00'}
                         </span>
                         <button
                           onClick={() => removeItem(index)}
