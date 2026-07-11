@@ -2,10 +2,16 @@ import axios from 'axios'
 import toast from 'react-hot-toast'
 
 // Get API URL from environment
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+// VITE_API_URL: http://localhost:8000/api or https://xxx.onrender.com/api
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api'
 
-// Remove trailing slash if present
-const baseURL = API_URL.replace(/\/+$/, '')
+// Remove trailing slash if present and ensure /api is included
+let baseURL = API_URL.replace(/\/+$/, '')
+
+// If the URL doesn't end with /api, append it
+if (!baseURL.endsWith('/api')) {
+  baseURL = `${baseURL}/api`
+}
 
 export const api = axios.create({
   baseURL: baseURL,
@@ -86,7 +92,7 @@ export const removeAuthToken = () => {
   delete api.defaults.headers.common['Authorization']
 }
 
-// API helper functions
+// API helper functions - paths are relative to baseURL
 export const authApi = {
   login: (username, password) => api.post('/auth/login/', { username, password }),
   register: (data) => api.post('/auth/register/', data),
