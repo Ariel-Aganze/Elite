@@ -18,6 +18,7 @@ import Products from './pages/company/Products'
 import ProductForm from './pages/company/ProductForm'
 import Customers from './pages/company/Customers'
 import CustomerForm from './pages/company/CustomerForm'
+import CustomerDetail from './pages/company/CustomerDetail'
 import NewSale from './pages/company/NewSale'
 import SalesList from './pages/company/SalesList'
 import SaleDetail from './pages/company/SaleDetail'
@@ -159,7 +160,7 @@ function App() {
               path="customers/:id" 
               element={
                 <ProtectedRoute requiredPermission="customers_manage">
-                  <CustomerForm />
+                  <CustomerDetail />
                 </ProtectedRoute>
               } 
             />
